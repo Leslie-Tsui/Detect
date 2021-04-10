@@ -1,4 +1,3 @@
-from ctypes import *
 from GigECamera_Types import *
 MVGigE = windll.LoadLibrary('dll/MVGigE')
 

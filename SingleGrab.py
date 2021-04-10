@@ -1,11 +1,17 @@
 import sys
 import os
 import shutil
+import time
+
+from DButil import MyDButil
 from MVGigE import *
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QPixmap, QPalette, QImage, QIcon
 from PyQt5.QtCore import Qt
-from MyLabel import MyLabel
+
+from Module.Detect import Detect, MyDetect
+from Module.MyLabel import MyLabel
+from Module.MyComboBox import Combox
 
 
 class MVCam(QWidget):
@@ -17,7 +23,7 @@ class MVCam(QWidget):
         # 以下是使用pyqt5初始化UI界面
         self.setGeometry(200, 200, 3000, 1500)
         self.setWindowTitle('SingGrab')
-        self.setWindowIcon(QIcon('GCap.ico'))
+        self.setWindowIcon(QIcon('dll/GCap.ico'))
         self.btnOpen = QPushButton('打开相机', self)
         self.combo = QComboBox(self)
         self.combo.addItem('25%')
@@ -27,7 +33,9 @@ class MVCam(QWidget):
         self.btnStart = QPushButton('开始采集', self)
         self.btnCreateSample = QPushButton('创建模板', self)
 
-
+        self.comboSelect = Combox(self)
+        self.comboSelect.showPopup()
+        self.comboSelect.addItem("选择模板")
 
         self.btnPause = QPushButton('暂停采集', self)
         self.btnSave = QPushButton('保存图像', self)
@@ -50,6 +58,7 @@ class MVCam(QWidget):
         self.label.setStyleSheet("QLabel{background:Dark;}")
         hbox = QHBoxLayout()
         hbox.addWidget(self.btnOpen)
+        hbox.addWidget(self.comboSelect)
         hbox.addWidget(self.combo)
         hbox.addWidget(self.btnCreateSample)
 
@@ -72,6 +81,7 @@ class MVCam(QWidget):
         self.table.setHorizontalHeaderLabels(['序号', '原始数据', '检测数据', '是否匹配'])
         tablebox = QVBoxLayout()
         tablebox.addWidget(self.table)
+
         playout = QGridLayout()
         playout.addLayout(hbox, 0, 0, 2, 2)
         playout.addLayout(vbox, 3, 0, 2, 2)
@@ -87,7 +97,54 @@ class MVCam(QWidget):
         self.btnSave.clicked.connect(self.saveImage)
         self.btnSetting.clicked.connect(self.setting)
         self.btnClose.clicked.connect(self.closeCam)
+
+        self.comboSelect.singnal.connect(self.fresh)
+        self.comboSelect.activated.connect(lambda: self.selectItem(self.comboSelect.currentIndex()))
         self.show()
+
+    # 刷新下拉框
+    def fresh(self):
+        self.comboSelect.clear()
+        items = []
+        result = self.getItem()
+        for item in result:
+            items.append(item[0])
+        self.comboSelect.addItems(items)
+
+    # 从数据库中读取模板的名字
+    def getItem(self):
+        db = MyDButil()
+        sql = "show tables from " + db.getName() + ";"
+        result = db.fetch_all(sql)
+        return result
+
+    # 选择了哪个模板，读取并返回这个模板
+    def selectItem(self, tag):
+        self.table_name = self.comboSelect.itemText(tag)
+        print(self.table_name)
+        result = self.setTable(str(self.table_name))
+        if result:
+            for item in result:
+                print(item)
+                label_id = QTableWidgetItem(item[0])
+                print(label_id.text())
+                origin_data = QTableWidgetItem(item[5])
+                print(origin_data.text())
+                try:
+                    self.table.setItem(int(label_id.text()) - 1, 0, label_id)
+                    self.table.setItem(int(label_id.text()) - 1, 1, origin_data)
+                except Exception:
+                    QMessageBox.information(self, "操作提示", "设置表格出错！", QMessageBox.Yes | QMessageBox.No)
+        else:
+            QMessageBox.information(self, "操作提示", "模板是空的，重新选择！", QMessageBox.Yes | QMessageBox.No)
+
+    # 根据返回的模板名字，去设置软件中的表格
+    def setTable(self, table_name):
+        sql = "select * from " + table_name + ";"
+        print(sql)
+        db = MyDButil()
+        result = db.fetch_all(sql)
+        return result
 
     def CreatSample(self):
         self.SampleUI = CreateSampleUI(self.hCam)
@@ -181,36 +238,26 @@ class MVCam(QWidget):
                 self.btnSave.setEnabled(True)
                 self.btnSetting.setEnabled(False)
                 self.btnClose.setEnabled(True)
-            else:
-                if (source.source == TriggerSourceEnums.TriggerSource_Software):  # 当触发模式打开且为软触发的时候，界面的行为
-                    MVStartGrabWindow(self.hCam, self.winid)  # 将采集的图像传输到指定窗口
-                    MVTriggerSoftware(self.hCam)
-                    self.btnOpen.setEnabled(False)
-                    self.combo.setEnabled(True)
-                    self.btnStart.setEnabled(True)
-                    self.btnPause.setEnabled(False)
-                    self.btnSave.setEnabled(True)
-                    self.btnSetting.setEnabled(True)
-                    self.btnClose.setEnabled(True)
-                else:  # 当触发模式打开且为外触发的时候，界面的行为
-                    MVStartGrabWindow(self.hCam, self.winid)  # 将采集的图像传输到指定窗口
-                    self.btnOpen.setEnabled(False)
-                    self.combo.setEnabled(True)
-                    self.btnStart.setEnabled(True)
-                    self.btnPause.setEnabled(False)
-                    self.btnSave.setEnabled(True)
-                    self.btnSetting.setEnabled(True)
-                    self.btnClose.setEnabled(True)
-        else:
-            self.btnStart.setText('开始采集')
-            MVStopGrabWindow(self.hCam)  # 停止采集
-            self.btnOpen.setEnabled(False)
-            self.combo.setEnabled(True)
-            self.btnStart.setEnabled(True)
-            self.btnPause.setEnabled(False)
-            self.btnSave.setEnabled(True)
-            self.btnSetting.setEnabled(True)
-            self.btnClose.setEnabled(True)
+                time.sleep(1)
+                MVFreezeGrabWindow(self.hCam, True)  # 冻结传输
+                # idn = MVSingleGrab(self.hCam, self.himage, 2000)
+                idn = MVGetSampleGrab(self.hCam, self.himage)
+                # 使用这个方法MVGetSampleGrab()，抓取到了一个图像
+                # 怎么把这个图片数据拿到，这个数据比如是图片数组
+                print(idn.status)
+                try:
+                    filename = os.path.basename("tmp.BMP")  # 获取到需要存储的文件名
+                    pathname = os.path.join(os.getcwd(), filename)  # 获取带有文件名的文件路径
+                    print(pathname)
+                    MVImageSave(self.himage, filename.encode('utf-8'))  # 将临时图片保存下来
+                    image = QImage(pathname)
+                    print(self.image)
+                    self.label.setPixmap(QPixmap.fromImage(image))  # 加载图片
+                except:
+                    msgBox = QMessageBox(QMessageBox.Warning, '提示', '抓取检测失败')
+                    msgBox.exec()
+        detect = MyDetect(self.table_name)
+        detect.detect_OCR("tmp.BMP")
 
     def pauseGrab(self):  # 暂停或者继续执行本函数
         if (self.sender().text() == '继续采集'):
@@ -236,7 +283,7 @@ class MVCam(QWidget):
 
     def saveImage(self):  # 保存图片执行本函数，在非触发模式时，只有采集暂停是才可以保存
         idn = MVGetSampleGrab(self.hCam, self.himage)
-        print(idn.idn)
+
         fname, ok = QFileDialog.getSaveFileName(self, '打开文件', './Images' + str(idn.idn) + '.bmp',
                                                 ("Images (*.bmp *.jpg *.tif *.raw)"))
         if ok:
@@ -292,6 +339,7 @@ class MVCam(QWidget):
         self.btnSetting.setEnabled(False)
         self.btnClose.setEnabled(False)
 
+
 class settingUI(QWidget):
     """
     本类是在主窗口点击设置按钮弹出的设置子窗口，接受主窗口的相机句柄，以完成本窗口的设置功能。
@@ -308,7 +356,7 @@ class settingUI(QWidget):
         self.move(300, 200)
         self.setFixedSize(350, 450)
         self.setWindowTitle('设置')
-        self.setWindowIcon(QIcon('GCap.ico'))
+        self.setWindowIcon(QIcon('dll/GCap.ico'))
         self.dial1 = QSlider(Qt.Horizontal, self)
         self.edit1 = QLineEdit(self)
         self.edit1.setEnabled(False)
@@ -454,7 +502,7 @@ class CreateSampleUI(QWidget):
         self.move(300, 200)
         self.setGeometry(100, 100, 700, 650)
         self.setWindowTitle('采集模板窗口')
-        self.setWindowIcon(QIcon('GCap.ico'))
+        self.setWindowIcon(QIcon('dll/GCap.ico'))
         self.btnSaveSampleImg = QPushButton('保存图像', self)
         self.btnCreateSample = QPushButton('创建模板', self)
 
@@ -496,7 +544,7 @@ class CreateSampleUI(QWidget):
     def saveSampleImg(self):  # 保存图片执行本函数，在非触发模式时，只有采集暂停是才可以保存
         # state=MVFreezeGrabWindow(self.hCam, True)  # 暂停将图像传输到指定窗口
         idn = MVGetSampleGrab(self.hCam, self.Sampleimage)
-        # print(idn.idn)
+        print(idn.status)
         fname, ok = QFileDialog.getSaveFileName(self, '打开文件', './Images' + str(idn.idn) + '.bmp',
                                                 ("Images (*.bmp *.jpg *.tif *.raw)"))
         if ok:
