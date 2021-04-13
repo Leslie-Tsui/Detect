@@ -43,10 +43,6 @@ class MyLabel(QLabel):
                 QMessageBox.information(self, "操作提示", "保存模板信息出错", QMessageBox.Yes | QMessageBox.No)
         if act.text() == '重画':
             self.rects = {}  # 点击重画后，将rects字典清空
-            full_path = '.\\info.txt'
-            file = open(full_path, 'a')  # 覆盖写入的模式
-            file.write("")
-            file.close()
             print('重画')
         if act.text() == '退出':
             print('退出')

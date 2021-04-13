@@ -6,10 +6,10 @@ import time
 from DButil import MyDButil
 from MVGigE import *
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QPixmap, QPalette, QImage, QIcon
+from PyQt5.QtGui import QPixmap, QPalette, QImage, QIcon, QBrush, QColor
 from PyQt5.QtCore import Qt
 
-from Module.Detect import Detect, MyDetect
+from Module.Detect import MyDetect
 from Module.MyLabel import MyLabel
 from Module.MyComboBox import Combox
 
@@ -30,23 +30,23 @@ class MVCam(QWidget):
         self.combo.addItem('50%')
         self.combo.addItem('100%')
         self.combo.setCurrentIndex(2)
-        self.btnStart = QPushButton('开始采集', self)
+        self.btnStart = QPushButton('开始检测', self)
         self.btnCreateSample = QPushButton('创建模板', self)
 
         self.comboSelect = Combox(self)
         self.comboSelect.showPopup()
         self.comboSelect.addItem("选择模板")
 
-        self.btnPause = QPushButton('暂停采集', self)
-        self.btnSave = QPushButton('保存图像', self)
-        self.btnSetting = QPushButton('设置', self)
+        # self.btnPause = QPushButton('暂停采集', self)
+        # self.btnSave = QPushButton('保存图像', self)
+        # self.btnSetting = QPushButton('设置', self)
         self.btnClose = QPushButton('关闭相机', self)
         self.combo.setEnabled(False)
         self.btnCreateSample.setEnabled(False)
         self.btnStart.setEnabled(False)
-        self.btnPause.setEnabled(False)
-        self.btnSave.setEnabled(False)
-        self.btnSetting.setEnabled(False)
+        # self.btnPause.setEnabled(False)
+        # self.btnSave.setEnabled(False)
+        # self.btnSetting.setEnabled(False)
         self.btnClose.setEnabled(False)
 
         self.label = QLabel(self)
@@ -63,9 +63,9 @@ class MVCam(QWidget):
         hbox.addWidget(self.btnCreateSample)
 
         hbox.addWidget(self.btnStart)
-        hbox.addWidget(self.btnPause)
-        hbox.addWidget(self.btnSave)
-        hbox.addWidget(self.btnSetting)
+        # hbox.addWidget(self.btnPause)
+        # hbox.addWidget(self.btnSave)
+        # hbox.addWidget(self.btnSetting)
         hbox.addWidget(self.btnClose)
 
         hbox.addStretch(1)
@@ -93,9 +93,9 @@ class MVCam(QWidget):
         self.combo.activated[str].connect(self.setSize)
         self.btnCreateSample.clicked.connect(self.CreatSample)
         self.btnStart.clicked.connect(self.startGrab)
-        self.btnPause.clicked.connect(self.pauseGrab)
-        self.btnSave.clicked.connect(self.saveImage)
-        self.btnSetting.clicked.connect(self.setting)
+        # self.btnPause.clicked.connect(self.pauseGrab)
+        # self.btnSave.clicked.connect(self.saveImage)
+        # self.btnSetting.clicked.connect(self.setting)
         self.btnClose.clicked.connect(self.closeCam)
 
         self.comboSelect.singnal.connect(self.fresh)
@@ -201,9 +201,9 @@ class MVCam(QWidget):
         self.combo.setEnabled(True)
         self.btnStart.setEnabled(True)
         self.btnCreateSample.setEnabled(True)
-        self.btnPause.setEnabled(False)
-        self.btnSave.setEnabled(False)
-        self.btnSetting.setEnabled(True)
+        # self.btnPause.setEnabled(False)
+        # self.btnSave.setEnabled(False)
+        # self.btnSetting.setEnabled(True)
         self.btnClose.setEnabled(True)
 
     # 本函数是修改显示比例
@@ -227,16 +227,12 @@ class MVCam(QWidget):
     def startGrab(self):  # 开始采集执行本函数
         mode = MVGetTriggerMode(self.hCam)  # 获取当前相机采集模式
         source = MVGetTriggerSource(self.hCam)  # 获取当前相机信号源
-        if (self.sender().text() == '开始采集'):
+        if (self.sender().text() == '开始检测'):
             if (mode.pMode == TriggerModeEnums.TriggerMode_Off):  # 当触发模式关闭的时候，界面的行为
-                self.btnStart.setText('停止采集')
                 MVStartGrabWindow(self.hCam, self.winid)  # 将采集的图像传输到指定窗口
                 self.btnOpen.setEnabled(False)
                 self.combo.setEnabled(True)
                 self.btnStart.setEnabled(True)
-                self.btnPause.setEnabled(True)
-                self.btnSave.setEnabled(True)
-                self.btnSetting.setEnabled(False)
                 self.btnClose.setEnabled(True)
                 time.sleep(1)
                 MVFreezeGrabWindow(self.hCam, True)  # 冻结传输
@@ -251,13 +247,30 @@ class MVCam(QWidget):
                     print(pathname)
                     MVImageSave(self.himage, filename.encode('utf-8'))  # 将临时图片保存下来
                     image = QImage(pathname)
-                    print(self.image)
                     self.label.setPixmap(QPixmap.fromImage(image))  # 加载图片
                 except:
                     msgBox = QMessageBox(QMessageBox.Warning, '提示', '抓取检测失败')
                     msgBox.exec()
         detect = MyDetect(self.table_name)
-        detect.detect_OCR("tmp.BMP")
+        boxes, scores = detect.detect_OCR("tmp.BMP")
+        max_intersect = detect.Detect_Result(boxes, scores)
+        print("这是max_intersect：", max_intersect)
+        # 这是max_intersect： [[10696.0, 3], [18036.0, 4], [32085.0, 5], [14760.0, 1], [9680.0, 2]]
+        tableItem_list = detect.get_TableItems(max_intersect)
+
+        row = 0
+        for tableItem in tableItem_list:
+            item_Result_Ture = QTableWidgetItem(str("是"))
+            item_Result_False = QTableWidgetItem(str("否"))
+            item_Result_False.setBackground(QBrush(QColor(255, 0, 0)))
+            print(tableItem.text(), row)
+            self.table.setItem(row, 2, tableItem)
+            if tableItem.text() == self.table.item(row, 1).text():
+                self.table.setItem(row, 3, item_Result_Ture)
+            else:
+                self.table.setItem(row, 3, item_Result_False)
+            row = row + 1
+        self.update()
 
     def pauseGrab(self):  # 暂停或者继续执行本函数
         if (self.sender().text() == '继续采集'):
@@ -326,17 +339,17 @@ class MVCam(QWidget):
     def closeCam(self):  # 关闭相机执行本函数
         result = MVCloseCam(self.hCam)
         self.combo.setCurrentIndex(2)
-        self.btnStart.setText('开始采集')
-        self.btnPause.setText('暂停采集')
+        self.btnStart.setText('开始检测')
+        # self.btnPause.setText('暂停采集')
         if (result.status != MVSTATUS_CODES.MVST_SUCCESS):
             msgBox = QMessageBox(QMessageBox.Warning, '提示', result.status)
             msgBox.exec()
         self.btnOpen.setEnabled(True)
         self.combo.setEnabled(False)
         self.btnStart.setEnabled(False)
-        self.btnPause.setEnabled(False)
-        self.btnSave.setEnabled(False)
-        self.btnSetting.setEnabled(False)
+        # self.btnPause.setEnabled(False)
+        # self.btnSave.setEnabled(False)
+        # self.btnSetting.setEnabled(False)
         self.btnClose.setEnabled(False)
 
 

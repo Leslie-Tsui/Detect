@@ -1,5 +1,5 @@
+from PyQt5.QtWidgets import QTableWidgetItem
 from paddleocr import PaddleOCR, draw_ocr
-
 
 from DButil import MyDButil
 
@@ -11,19 +11,22 @@ class MyDetect:
 
     # 生成对比结果
     def Detect_Result(self, boxes, texts):
-        digit = []
+        self.digit = []
         coords = []
         for txt in texts:
             if txt.isdigit():
-                digit.append(txt)
+                self.digit.append(txt)
                 index = texts.index(txt)  # 当前文本是数字的索引，对应到坐标去
                 coords.append(boxes[index])
-        print("筛选后的数字", digit, "筛选后的位置", coords)
+        print("筛选后的数字", self.digit, "筛选后的位置", coords)
         rect1 = []
         rect2 = []
 
         sql = "select * from " + self.table_name + ";"
         self.result = self.db.fetch_all(sql)
+        print("这是result", len(self.result))
+        print("这是digit", len(self.digit))
+        # if len(self.result)==len(self.digit):
         for info in self.result:
             temp = []
             temp.append(int(info[1]))
@@ -47,9 +50,15 @@ class MyDetect:
                 intersect = self.compute_iou(sample_rect, rect)
                 intersect_list.append([intersect, rect2.index(rect)])
             max_intersect.append(max(intersect_list))
-        return max_intersect
+        return max_intersect  # 这是max_intersect： [[10696.0, 3], [18036.0, 4], [32085.0, 5], [14760.0, 1], [9680.0, 2]]
 
-
+    # 设置表格
+    def get_TableItems(self, max_intersect):
+        tableItem_list = []
+        for item in max_intersect:
+            item_data = QTableWidgetItem(self.digit[item[1]])
+            tableItem_list.append(item_data)
+        return tableItem_list
 
 
     # 计算最大重叠面积
@@ -73,10 +82,9 @@ class MyDetect:
     def detect_OCR(self, img):
         # Paddleocr目前支持中英文、英文、法语、德语、韩语、日语，可以通过修改lang参数进行切换
         # 参数依次为`ch`, `en`, `french`, `german`, `korean`, `japan`。
-        ocr = PaddleOCR(use_angle_cls=True, use_gpu=False, lang="ch", use_space_char=True,
-                        det_db_unclip_ratio=2.5)  # det_db_unclip_ratio=2.5这是参数定义位置，这个参数是检测后处理时控制文本框大小的，默认2.0，可以尝试改成2.5或者更大，反之，如果觉得文本框不够紧凑，也可以把该参数调小。 need to run only once to download and load model into memory
-        img_path = '1.jpg'
-        result = ocr.ocr(img_path, cls=True)
+        ocr = PaddleOCR(use_angle_cls=True, use_gpu=False, lang="ch", use_space_char=True,det_db_unclip_ratio=2.0)  # det_db_unclip_ratio=2.5这是参数定义位置，这个参数是检测后处理时控制文本框大小的，默认2.0，可以尝试改成2.5或者更大，反之，如果觉得文本框不够紧凑，也可以把该参数调小。 need to run only once to download and load model into memory
+        img_path = img
+        result = ocr.ocr(img_path,cls=False)
         for line in result:
             print(line)
 
@@ -89,4 +97,4 @@ class MyDetect:
         im_show = draw_ocr(image, boxes, txts, scores, font_path='/path/to/PaddleOCR/doc/simfang.ttf')
         im_show = Image.fromarray(im_show)
         im_show.save('result.jpg')
-        return boxes, scores
+        return boxes, txts
